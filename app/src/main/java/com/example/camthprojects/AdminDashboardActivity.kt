@@ -257,27 +257,13 @@ class AdminDashboardActivity : AppCompatActivity() {
             setPadding(padding, padding, padding, padding)
         }
 
-        val services = arrayOf(
-            "Select a Service",
-            "Electrical Cables Upgrades",
-            "Code Violation Repair / Home Sale Inspection Repair",
-            "Modernization of Electrical Installation in Transformers",
-            "Installation & Maintenance of Street Lights",
-            "Laying of MV & LV Cables",
-            "Installation & Maintenance of Mini Substations",
-            "Installation & Maintenance of Meters in Pillar Boxes",
-            "Stringing Overhead Contractors"
-        )
-
-        val spServices = Spinner(this@AdminDashboardActivity).apply {
-            adapter = ArrayAdapter(this@AdminDashboardActivity, android.R.layout.simple_spinner_dropdown_item, services)
-        }
+        val etName = EditText(this@AdminDashboardActivity).apply { hint = "Project Name"; textSize = 18f }
         val etDesc = EditText(this@AdminDashboardActivity).apply { hint = "Project Description"; textSize = 18f; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 16 } }
         val btnStartDate = Button(this@AdminDashboardActivity).apply { text = "Start Date"; textSize = 18f; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 16 } }
         val btnEndDate = Button(this@AdminDashboardActivity).apply { text = "End Date"; textSize = 18f; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 16 } }
         val spUsers = Spinner(this@AdminDashboardActivity).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 16 } }
 
-        dialogLayout.addView(spServices)
+        dialogLayout.addView(etName)
         dialogLayout.addView(etDesc)
         dialogLayout.addView(btnStartDate)
         dialogLayout.addView(btnEndDate)
@@ -287,7 +273,7 @@ class AdminDashboardActivity : AppCompatActivity() {
 
         if (isEditing) {
             project?.let {
-                spServices.setSelection(services.indexOf(it.name))
+                etName.setText(it.name)
                 etDesc.setText(it.description)
                 btnStartDate.text = it.startDate
                 btnEndDate.text = it.endDate
@@ -303,30 +289,28 @@ class AdminDashboardActivity : AppCompatActivity() {
             .setIcon(R.drawable.logo_camth)
             .setView(dialogLayout)
             .setPositiveButton(if (isEditing) "Save" else "Add") { _, _ ->
-                val name = spServices.selectedItem.toString()
+                val name = etName.text.toString()
                 val description = etDesc.text.toString()
                 val startDate = btnStartDate.text.toString()
                 val endDate = btnEndDate.text.toString()
                 val selectedUser = allUsers[spUsers.selectedItemPosition]
 
-                if (name != services[0]) {
-                    lifecycleScope.launch(Dispatchers.IO) {
-                        if (isEditing) {
-                            project?.let {
-                                val updatedProject = it.copy(name = name, description = description, startDate = startDate, endDate = endDate, assignedUserId = selectedUser.uid)
-                                db.projectDao().update(updatedProject)
-                                withContext(Dispatchers.Main) {
-                                    sendNotification("Project Update", "Project '${updatedProject.name}' has been updated.")
-                                    loadDashboard()
-                                }
-                            }
-                        } else {
-                            val newProject = Project(id = UUID.randomUUID().toString(), name = name, description = description, startDate = startDate, endDate = endDate, assignedUserId = selectedUser.uid)
-                            db.projectDao().insert(newProject)
+                lifecycleScope.launch(Dispatchers.IO) {
+                    if (isEditing) {
+                        project?.let {
+                            val updatedProject = it.copy(name = name, description = description, startDate = startDate, endDate = endDate, assignedUserId = selectedUser.uid)
+                            db.projectDao().update(updatedProject)
                             withContext(Dispatchers.Main) {
-                                sendNotification("Project Update", "Project '${newProject.name}' has been assigned to ${selectedUser.fullName}.")
+                                sendNotification("Project Update", "Project '${updatedProject.name}' has been updated.")
                                 loadDashboard()
                             }
+                        }
+                    } else {
+                        val newProject = Project(id = UUID.randomUUID().toString(), name = name, description = description, startDate = startDate, endDate = endDate, assignedUserId = selectedUser.uid)
+                        db.projectDao().insert(newProject)
+                        withContext(Dispatchers.Main) {
+                            sendNotification("Project Update", "Project '${newProject.name}' has been assigned to ${selectedUser.fullName}.")
+                            loadDashboard()
                         }
                     }
                 }
