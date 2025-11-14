@@ -2,13 +2,13 @@ package com.example.camthprojects
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.*
+import android.widget.Button
+import android.widget.EditText
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
 import com.example.camthprojects.models.User
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.example.camthprojects.InMemoryDataStore
 import java.util.UUID
 
 class SignupActivity : AppCompatActivity() {
@@ -18,15 +18,12 @@ class SignupActivity : AppCompatActivity() {
     private lateinit var etPassword: EditText
     private lateinit var btnSignup: Button
     private lateinit var btnGoToLogin: TextView
-    private lateinit var db: AppDatabase
 
     private val masterAdminEmail = "lethabo.hlalele01@gmail.com"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_signup)
-
-        db = AppDatabase.getDatabase(this)
 
         etFullName = findViewById(R.id.etFullName)
         etEmail = findViewById(R.id.etEmail)
@@ -51,27 +48,19 @@ class SignupActivity : AppCompatActivity() {
             return
         }
 
-        // Assign role based on email
-        val role = if (email.equals(masterAdminEmail, ignoreCase = true)) "admin" else "user"
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            val existingUser = db.userDao().getAll().find { it.email.equals(email, ignoreCase = true) }
-            if (existingUser != null) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@SignupActivity, "Signup failed: Email already exists", Toast.LENGTH_SHORT).show()
-                }
-                return@launch
-            }
-
-            val newUser = User(uid = UUID.randomUUID().toString(), fullName = fullName, email = email, role = role, password = password) // Storing password directly is not secure
-            db.userDao().insert(newUser)
-
-            withContext(Dispatchers.Main) {
-                Toast.makeText(this@SignupActivity, "Registration successful!", Toast.LENGTH_SHORT).show()
-                val intent = Intent(this@SignupActivity, LoginActivity::class.java)
-                startActivity(intent)
-                finish()
-            }
+        val existingUser = InMemoryDataStore.users.find { it.email.equals(email, ignoreCase = true) }
+        if (existingUser != null) {
+            Toast.makeText(this, "User with this email already exists", Toast.LENGTH_SHORT).show()
+            return
         }
+
+        val role = if (email.equals(masterAdminEmail, ignoreCase = true)) "admin" else "user"
+        val newUser = User(uid = UUID.randomUUID().toString(), fullName = fullName, email = email, role = role, password = password)
+
+        InMemoryDataStore.users.add(newUser)
+
+        Toast.makeText(this, "Registration successful! Please log in.", Toast.LENGTH_SHORT).show()
+        startActivity(Intent(this, LoginActivity::class.java))
+        finish()
     }
 }

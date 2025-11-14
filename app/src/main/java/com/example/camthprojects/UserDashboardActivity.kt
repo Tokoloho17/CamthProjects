@@ -19,12 +19,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.cardview.widget.CardView
 import androidx.core.app.NotificationCompat
-import androidx.lifecycle.lifecycleScope
 import com.example.camthprojects.models.Project
 import com.example.camthprojects.models.ServiceRequest
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.example.camthprojects.InMemoryDataStore // This was the missing import
 import java.util.UUID
 
 class UserDashboardActivity : AppCompatActivity() {
@@ -32,12 +29,15 @@ class UserDashboardActivity : AppCompatActivity() {
     private lateinit var projectListLayout: LinearLayout
     private lateinit var requestListLayout: LinearLayout
     private lateinit var btnRequestService: Button
-    private lateinit var db: AppDatabase
     private lateinit var currentUserId: String
+    private lateinit var currentUserFullName: String
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_user_dashboard)
+
+        currentUserId = intent.getStringExtra("USER_ID") ?: ""
+        currentUserFullName = intent.getStringExtra("USER_FULL_NAME") ?: ""
 
         val toolbar: Toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
@@ -48,9 +48,6 @@ class UserDashboardActivity : AppCompatActivity() {
         requestListLayout = findViewById(R.id.requestList)
         btnRequestService = findViewById(R.id.btnRequestService)
 
-        db = AppDatabase.getDatabase(this)
-        currentUserId = intent.getStringExtra("USER_ID") ?: ""
-
         btnRequestService.setOnClickListener { showRequestServiceDialog() }
         createNotificationChannel()
     }
@@ -60,64 +57,35 @@ class UserDashboardActivity : AppCompatActivity() {
         loadDashboard()
     }
 
-    override fun onSupportNavigateUp(): Boolean {
-        onBackPressedDispatcher.onBackPressed()
-        return true
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        menuInflater.inflate(R.menu.dashboard_menu, menu)
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.action_logout -> {
-                logout()
-                true
-            }
-            else -> super.onOptionsItemSelected(item)
-        }
-    }
-
-    private fun logout() {
-        val intent = Intent(this, LoginActivity::class.java)
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        startActivity(intent)
-        finish()
-    }
-
     private fun loadDashboard() {
         loadProjects()
         loadRequests()
     }
 
-    private fun loadProjects() = lifecycleScope.launch(Dispatchers.IO) {
-        val projects = db.projectDao().getAll().filter { it.assignedUserId == currentUserId }
-        withContext(Dispatchers.Main) {
-            projectListLayout.removeAllViews()
-            if (projects.isEmpty()) {
-                projectListLayout.addView(TextView(this@UserDashboardActivity).apply { text = "No projects assigned."; textSize = 16f })
-            } else {
-                projects.forEach { project ->
-                    val card = CardView(this@UserDashboardActivity).apply {
-                        layoutParams = LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT
-                        ).apply { setMargins(0, 0, 0, 16) }
-                        radius = 16f
-                        setContentPadding(32, 32, 32, 32)
-                        setOnClickListener { showProjectDetailsDialog(project) }
+    private fun loadProjects() {
+        val projects = InMemoryDataStore.projects.filter { it.assignedUserId == currentUserId }
+        projectListLayout.removeAllViews()
+        if (projects.isEmpty()) {
+            projectListLayout.addView(TextView(this@UserDashboardActivity).apply { text = "No projects assigned."; textSize = 16f })
+        } else {
+            projects.forEach { project ->
+                val card = CardView(this@UserDashboardActivity).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { setMargins(0, 0, 0, 16) }
+                    radius = 16f
+                    setContentPadding(32, 32, 32, 32)
+                    setOnClickListener { showProjectDetailsDialog(project) }
 
-                        val layout = LinearLayout(this@UserDashboardActivity).apply {
-                            orientation = LinearLayout.VERTICAL
-                            addView(TextView(this@UserDashboardActivity).apply { text = project.name; textSize = 20f; setTypeface(null, Typeface.BOLD) })
-                            addView(TextView(this@UserDashboardActivity).apply { text = "Status: ${project.status}"; textSize = 16f; setTypeface(null, Typeface.ITALIC); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 12 } })
-                        }
-                        addView(layout)
+                    val layout = LinearLayout(this@UserDashboardActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        addView(TextView(this@UserDashboardActivity).apply { text = project.name; textSize = 20f; setTypeface(null, Typeface.BOLD) })
+                        addView(TextView(this@UserDashboardActivity).apply { text = "Status: ${project.status}"; textSize = 16f; setTypeface(null, Typeface.ITALIC); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 12 } })
                     }
-                    projectListLayout.addView(card)
+                    addView(layout)
                 }
+                projectListLayout.addView(card)
             }
         }
     }
@@ -143,33 +111,35 @@ class UserDashboardActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun loadRequests() = lifecycleScope.launch(Dispatchers.IO) {
-        val requests = db.serviceRequestDao().getAll().filter { it.userId == currentUserId }
-        withContext(Dispatchers.Main) {
-            requestListLayout.removeAllViews()
-            if (requests.isEmpty()) {
-                requestListLayout.addView(TextView(this@UserDashboardActivity).apply { text = "No service requests submitted."; textSize = 16f })
-            } else {
-                requests.forEach { request ->
-                    val card = CardView(this@UserDashboardActivity).apply {
-                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 0, 16) }
-                        radius = 16f
-                        setContentPadding(32, 32, 32, 32)
+    private fun loadRequests() {
+        val requests = InMemoryDataStore.serviceRequests.filter { it.userId == currentUserId }
+        requestListLayout.removeAllViews()
+        if (requests.isEmpty()) {
+            requestListLayout.addView(TextView(this@UserDashboardActivity).apply { text = "No service requests submitted."; textSize = 16f })
+        } else {
+            requests.forEach { request ->
+                val card = CardView(this@UserDashboardActivity).apply {
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 0, 16) }
+                    radius = 16f
+                    setContentPadding(32, 32, 32, 32)
 
-                        val layout = LinearLayout(this@UserDashboardActivity).apply {
-                            orientation = LinearLayout.VERTICAL
-                            addView(TextView(this@UserDashboardActivity).apply { text = request.title; textSize = 20f; setTypeface(null, Typeface.BOLD) })
-                            addView(TextView(this@UserDashboardActivity).apply { text = "Approval: ${request.approvalStatus}"; textSize = 16f; setTypeface(null, Typeface.ITALIC); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 12 } })
-                        }
-                        addView(layout)
+                    val layout = LinearLayout(this@UserDashboardActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        addView(TextView(this@UserDashboardActivity).apply { text = request.title; textSize = 20f; setTypeface(null, Typeface.BOLD) })
+                        addView(TextView(this@UserDashboardActivity).apply { text = "Approval: ${request.approvalStatus}"; textSize = 16f; setTypeface(null, Typeface.ITALIC); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 12 } })
                     }
-                    requestListLayout.addView(card)
+                    addView(layout)
                 }
+                requestListLayout.addView(card)
             }
         }
     }
 
     private fun showRequestServiceDialog() {
+        val view = layoutInflater.inflate(R.layout.dialog_request_service, null)
+        val spServices = view.findViewById<Spinner>(R.id.spServices)
+        val etDesc = view.findViewById<EditText>(R.id.etDescription)
+
         val services = arrayOf(
             "Select a Service",
             "Electrical Cables Upgrades",
@@ -181,40 +151,61 @@ class UserDashboardActivity : AppCompatActivity() {
             "Installation & Maintenance of Meters in Pillar Boxes",
             "Stringing Overhead Contractors"
         )
-
-        val spServices = Spinner(this).apply {
-            adapter = ArrayAdapter(this@UserDashboardActivity, android.R.layout.simple_spinner_dropdown_item, services)
-        }
-        val etDesc = EditText(this).apply { hint = "Brief description of the service needed"; textSize = 18f; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 16 } }
-
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            val padding = (20 * resources.displayMetrics.density).toInt()
-            setPadding(padding, padding, padding, padding)
-            addView(spServices)
-            addView(etDesc)
-        }
+        spServices.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, services)
 
         AlertDialog.Builder(this)
             .setTitle("New Service Request")
             .setIcon(R.drawable.logo_camth)
-            .setView(layout)
+            .setView(view)
             .setPositiveButton("Submit") { _, _ ->
                 val selectedService = spServices.selectedItem.toString()
                 val description = etDesc.text.toString()
+
                 if (selectedService != services[0] && description.isNotBlank()) {
-                    val request = ServiceRequest(id = UUID.randomUUID().toString(), userId = currentUserId, title = selectedService, description = description)
-                    lifecycleScope.launch(Dispatchers.IO) {
-                        db.serviceRequestDao().insert(request)
-                        withContext(Dispatchers.Main) {
-                            sendNotificationToAdmins("New Service Request", "A new service request has been submitted: '$selectedService'")
-                            loadRequests()
-                        }
-                    }
+                    val request = ServiceRequest(
+                        id = UUID.randomUUID().toString(), 
+                        userId = currentUserId, 
+                        userFullName = currentUserFullName,
+                        title = selectedService, 
+                        description = description, 
+                        status = "Pending", 
+                        approvalStatus = "Pending"
+                    )
+                    InMemoryDataStore.serviceRequests.add(request)
+                    sendNotificationToAdmins("New Service Request", "A new service request has been submitted: '$selectedService'")
+                    loadRequests()
                 }
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    override fun onSupportNavigateUp(): Boolean {
+        onBackPressedDispatcher.onBackPressed()
+        return true
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.dashboard_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_logout -> {
+                logout()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    private fun logout() {
+        InMemoryDataStore.clearAll()
+        val intent = Intent(this, LoginActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+        finish()
     }
 
     private fun createNotificationChannel() {

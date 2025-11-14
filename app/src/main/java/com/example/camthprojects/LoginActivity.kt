@@ -2,13 +2,14 @@ package com.example.camthprojects
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.*
+import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.EditText
+import android.widget.Spinner
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
-import com.example.camthprojects.models.User
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.example.camthprojects.InMemoryDataStore
 
 class LoginActivity : AppCompatActivity() {
 
@@ -17,13 +18,10 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var spRole: Spinner
     private lateinit var btnLogin: Button
     private lateinit var btnGoToSignup: TextView
-    private lateinit var db: AppDatabase
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
-
-        db = AppDatabase.getDatabase(this)
 
         etEmail = findViewById(R.id.etEmail)
         etPassword = findViewById(R.id.etPassword)
@@ -32,7 +30,7 @@ class LoginActivity : AppCompatActivity() {
         btnGoToSignup = findViewById(R.id.btnGoToSignup)
 
         val roles = arrayOf("Select Role", "user", "admin")
-        spRole.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, roles)
+        spRole.adapter = ArrayAdapter(this, R.layout.spinner_item, roles)
 
         btnLogin.setOnClickListener { loginUser() }
         btnGoToSignup.setOnClickListener {
@@ -51,24 +49,21 @@ class LoginActivity : AppCompatActivity() {
             return
         }
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            val user = db.userDao().getAll().find { it.email.equals(email, ignoreCase = true) }
+        val user = InMemoryDataStore.users.find { it.email.equals(email, ignoreCase = true) }
 
-            withContext(Dispatchers.Main) {
-                if (user != null && user.password == password && user.role == role) {
-                    val intent = if (user.role == "admin") {
-                        Intent(this@LoginActivity, AdminDashboardActivity::class.java)
-                    } else {
-                        Intent(this@LoginActivity, UserDashboardActivity::class.java).apply {
-                            putExtra("USER_ID", user.uid)
-                        }
-                    }
-                    startActivity(intent)
-                    finish()
-                } else {
-                    Toast.makeText(this@LoginActivity, "Invalid credentials or role", Toast.LENGTH_SHORT).show()
+        if (user != null && user.password == password && user.role == role) {
+            val intent = if (user.role == "admin") {
+                Intent(this@LoginActivity, AdminDashboardActivity::class.java)
+            } else {
+                Intent(this@LoginActivity, UserDashboardActivity::class.java).apply {
+                    putExtra("USER_ID", user.uid)
+                    putExtra("USER_FULL_NAME", user.fullName)
                 }
             }
+            startActivity(intent)
+            finish()
+        } else {
+            Toast.makeText(this@LoginActivity, "Invalid credentials or role", Toast.LENGTH_SHORT).show()
         }
     }
 }
